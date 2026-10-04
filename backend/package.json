@@ -1,0 +1,72 @@
+{
+  "name": "aurora-backend",
+  "version": "1.0.0",
+  "license": "Elastic-2.0",
+  "author": "Select Red Ltd (https://selectred.com)",
+  "description": "Aurora - Test Results Tracker Backend API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "seed": "node scripts/seed.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "build": "pkg . --out-path dist",
+    "patch-prisma": "node -e \"const fs=require('fs');const f='node_modules/.prisma/client/default.js';fs.writeFileSync(f,\\\"module.exports={...require('./index.js')}\\\")\"",
+    "build:linux": "prisma generate && npm run patch-prisma && pkg . --targets node22-linux-x64 --out-path dist",
+    "build:all": "pkg . --targets node20-macos-arm64,node20-macos-x64,node20-win-x64,node20-linux-x64 --out-path dist"
+  },
+  "pkg": {
+    "assets": [
+      "prisma/**/*",
+      "node_modules/.prisma/**/*",
+      "node_modules/@prisma/client/**/*",
+      "node_modules/jszip/**/*",
+      "node_modules/lie/**/*",
+      "node_modules/immediate/**/*",
+      "node_modules/pako/**/*",
+      "node_modules/setimmediate/**/*",
+      "node_modules/ws/**/*",
+      "node_modules/playwright-core/**/*.json",
+      "tests/**/*",
+      "buildinfo.js"
+    ],
+    "scripts": [
+      "controllers/**/*.js",
+      "services/**/*.js",
+      "routes/**/*.js",
+      "lib/**/*.js",
+      "middleware/**/*.js"
+    ],
+    "outputPath": "dist"
+  },
+  "bin": "server.js",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1",
+    "@playwright/test": "1.61.1",
+    "@prisma/client": "^6.19.2",
+    "axios": "^1.13.4",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dockerode": "^4.0.2",
+    "express": "^4.22.1",
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.10.1",
+    "morgan": "^1.10.1",
+    "node-cron": "^3.0.3",
+    "openai": "^6.35.0",
+    "playwright": "1.61.1",
+    "playwright-core": "1.61.1",
+    "prisma": "^6.19.2",
+    "uuid": "^9.0.1",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.14.0",
+    "dotenv": "^17.3.1",
+    "nodemon": "^3.1.11"
+  },
+  "overrides": {
+    "into-stream": "6.0.0"
+  }
+}

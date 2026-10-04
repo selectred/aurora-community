@@ -1,0 +1,765 @@
+// ============================================
+// Aurora Prisma Schema
+// SQLite database for Tauri desktop app
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// AppSettings - Singleton for app configuration
+// ============================================
+model AppSettings {
+  id                    String   @id @default(uuid())
+  managerName           String   @default("Manager")
+  email                 String?
+
+  // Preferences (stored as JSON string)
+  preferencesJson       String   @default("{}")
+
+  // API keys for AI providers
+  anthropicKey          String   @default("")
+  openaiKey             String   @default("")
+  azureOpenaiKey        String   @default("")
+  azureOpenaiEndpoint   String   @default("")
+  azureOpenaiDeployment String   @default("")
+  localLlmEndpoint      String   @default("")
+  localLlmModel         String   @default("")
+  localLlmApiKey        String   @default("")
+  activeAiProvider      String   @default("none") // anthropic, openai, azure-openai, local, none
+
+  // Synthetic defaults (stored as JSON string)
+  syntheticDefaultsJson String   @default("{}")
+
+  // Continuum integration
+  continuumEnabled      Boolean  @default(false)
+  continuumUrl          String   @default("")
+  continuumApiKey       String   @default("")
+
+  // Issue tracker integration (Jira or Azure DevOps)
+  trackerProvider       String   @default("none") // none, jira, ado
+  trackerConfigJson     String   @default("{}")   // non-secret connection settings
+  trackerToken          String   @default("")     // API token / PAT — never returned to the UI
+
+  // Performance (k6) defaults: local VU cap, max duration, default thresholds and load
+  perfSettingsJson      String   @default("{}")
+
+  // Pack storage settings
+  packsRootDir          String?                 // root dir for file-backed packs
+  packFileSizeThreshold Int      @default(8192) // 0 = always inline; N = auto-file above N bytes
+  maxPackCount          Int?                    // null = unlimited; gate for tier limits
+
+  // Failure evidence (video/screenshot/trace) settings
+  evidenceRootDir       String?                  // override root dir; defaults to AURORA_DATA_DIR/evidence
+  evidenceRetentionDays Int      @default(30)    // bundles older than this are pruned by the cleanup cron
+  evidenceCaptureEnabled Boolean @default(true)  // kill-switch for video/screenshot/trace capture
+  ragRedThresholdPct    Int      @default(50)    // Feature/Initiative pass-rate % below which RAG status is Red
+
+  setupCompleted        Boolean  @default(false)
+
+  // Encryption key for pack variables (generated once at setup)
+  encryptionKey         String?
+
+  // Machine fingerprint — generated once on first boot, used for license binding
+  machineId             String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// ============================================
+// LLMInteractionLog - AI call telemetry and quality signals
+// ============================================
+model LLMInteractionLog {
+  id                  String   @id @default(uuid())
+  sessionId           String   @default("")
+  feature             String   @default("unknown")
+  specId              String?
+  prompt              String   @default("")
+  completion          String   @default("")
+  outcome             String   @default("pending")
+  correctedCompletion String?
+  promptTokens        Int      @default(0)
+  completionTokens    Int      @default(0)
+  totalTokens         Int      @default(0)
+  estimatedCostUsd    Float    @default(0)
+  latencyMs           Int      @default(0)
+  modelUsed           String   @default("")
+  provider            String   @default("")
+  locatorsVerified    Boolean?
+  testPassedFirstRun  Boolean?
+  createdAt           DateTime @default(now())
+}
+
+// ============================================
+// License - Desktop app licensing
+// ============================================
+model License {
+  id              String    @id @default(uuid())
+  licenseKey      String?   @unique
+  tier            String    @default("free") // free, pro, unlimited
+
+  // Limits (stored as JSON string for flexibility)
+  limitsJson      String    @default("{}")
+
+  // Registration
+  registeredName  String?
+  registeredEmail String?
+
+  isActive        Boolean   @default(true)
+  activatedAt     DateTime  @default(now())
+  expiresAt       DateTime?
+
+  // Remote validation — null means never validated remotely (legacy key or free tier)
+  lastValidatedAt DateTime?
+  // Last answer from the licence server: active | cancelled (runs to expiresAt),
+  // or the reason it was refused (revoked, expired, cancelled, not_found)
+  remoteStatus    String?
+  statusMessage   String?
+
+  // Usage tracking (stored as JSON)
+  usageJson       String    @default("{}")
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ============================================
+// Team - Test teams managed by owner
+// ============================================
+model Team {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String   @default("")
+  color       String   @default("#7367F0")
+
+  // Metrics (stored as JSON)
+  metricsJson String   @default("{}")
+
+  isActive    Boolean  @default(true)
+  leadId      String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  lead        TeamMember?           @relation("TeamLead", fields: [leadId], references: [id])
+  members     TeamMember[]          @relation("TeamMembers")
+  testResults TestResult[]
+  agentSpecs  AgentTestSpec[]
+  synthetics  SyntheticTransaction[]
+  testPacks   TestPack[]
+  initiatives StrategicInitiative[]
+  features    Feature[]
+  apiTests    APITest[]
+  terminals   AgentTerminalSession[]
+}
+
+// ============================================
+// TeamMember - QA leads and engineers
+// ============================================
+model TeamMember {
+  id          String   @id @default(uuid())
+  name        String
+  email       String?
+  role        String   @default("qa_engineer") // qa_lead, qa_engineer
+  avatarColor String   @default("#7367F0")
+  isActive    Boolean  @default(true)
+
+  // Stats (stored as JSON)
+  statsJson   String   @default("{}")
+
+  teamId      String
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  team           Team                  @relation("TeamMembers", fields: [teamId], references: [id], onDelete: Cascade)
+  leadOfTeams    Team[]                @relation("TeamLead")
+  testResults    TestResult[]
+  agentSpecs     AgentTestSpec[]
+  initiatives    StrategicInitiative[]
+}
+
+// ============================================
+// TestResult - Test execution results
+// ============================================
+model TestResult {
+  id            String   @id @default(uuid())
+  testCaseId    String
+  testName      String
+  testType      String   // functional, performance, api
+  suite         String?
+  status        String   // passed, failed, skipped, flaky
+  duration      Int?
+  errorMessage  String?
+  stackTrace    String?
+  screenshot    String?
+  evidenceDir   String?  // bundle folder name under evidenceRoot; files inside follow a fixed naming convention
+  browser       String?
+  environment   String   @default("staging") // development, staging, production
+  scriptLocation String?
+  retries       Int      @default(0)
+  engine        String   @default("playwright") // execution engine that produced this result
+
+  // Metadata (stored as JSON)
+  metadataJson  String   @default("{}")
+
+  teamId        String?
+  executedById  String?
+  specId        String?
+
+  executedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  // Relations
+  team       Team?          @relation(fields: [teamId], references: [id])
+  executedBy TeamMember?    @relation(fields: [executedById], references: [id])
+  spec       AgentTestSpec? @relation(fields: [specId], references: [id])
+
+  @@index([testCaseId])
+  @@index([testType, status, executedAt])
+  @@index([teamId, executedAt])
+}
+
+// ============================================
+// AgentTestSpec - AI-generated test specifications
+// ============================================
+model AgentTestSpec {
+  id                    String    @id @default(uuid())
+  specId                String    @unique
+  name                  String
+  testType              String    @default("functional") // functional, api
+  isSynthetic           Boolean   @default(false)
+  promotedToSyntheticAt DateTime?
+  description           String?
+  url                   String
+
+  // API-specific fields
+  method                String    @default("GET") // GET, POST, PUT, PATCH, DELETE
+  headers               String    @default("")
+  requestBody           String    @default("")
+  expectedStatus        Int       @default(200)
+
+  // Synthetic fields
+  alertThreshold        Int       @default(3000)
+
+  // Test content
+  markdownSpec          String
+  generatedCode         String?
+
+  // Storage mode for generatedCode
+  // "inline" — code stored in generatedCode column (default, existing behaviour)
+  // "file"   — code written to disk; generatedCode is null; codeFilePath is set
+  codeStorage           String    @default("inline")
+  codeFilePath          String?   // relative path from packsRootDir, e.g. "spec-id/index.spec.js"
+  fixturesFilePath      String?   // path to fixtures/setup file for adopted packs
+
+  // Execution engine that generatedCode targets — always "playwright". "selenium" rows are
+  // legacy and are rejected at run/heal time.
+  engine                String    @default("playwright")
+
+  status                String    @default("draft") // draft, generating, ready, healing, failed
+  enabled               Boolean   @default(true)
+  schedule              String    @default("*/30 * * * *")
+  timeout               Int       @default(60000)
+  healCount             Int       @default(0)
+  validatedAt           DateTime?
+
+  // Last heal details (stored as JSON)
+  lastHealDetailsJson   String    @default("{}")
+
+  // Last run result (status, failures, ranAt)
+  lastResultJson        String    @default("{}")
+
+  // Tags (stored as JSON array)
+  tagsJson              String    @default("[]")
+
+  // Generation metadata (stored as JSON)
+  generationMetaJson    String    @default("{}")
+
+  // MCP intent graph (stored as JSON) — parsed step-by-step intent from the spec code
+  intentJson            String?
+
+  teamId                String?
+  createdById           String?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  team       Team?        @relation(fields: [teamId], references: [id])
+  createdBy  TeamMember?  @relation(fields: [createdById], references: [id])
+  results    TestResult[]
+  testPacks  TestPackTest[]
+  bugReports BugReport[]
+
+  @@index([specId])
+  @@index([status])
+  @@index([enabled])
+  @@index([isSynthetic])
+  @@index([testType])
+}
+
+// ============================================
+// SyntheticTransaction - Synthetic monitor definitions
+// ============================================
+model SyntheticTransaction {
+  id             String   @id @default(uuid())
+  transactionId  String   @unique
+  name           String
+  description    String?
+  url            String
+  scriptPath     String
+  enabled        Boolean  @default(true)
+  schedule       String   @default("*/30 * * * *")
+  timeout        Int      @default(60000)
+  retryOnFailure Boolean  @default(false)
+  retryCount     Int      @default(0)
+
+  // Tags (stored as JSON array)
+  tagsJson       String   @default("[]")
+
+  teamId         String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  team    Team?             @relation(fields: [teamId], references: [id])
+  results SyntheticResult[]
+
+  @@index([transactionId])
+}
+
+// ============================================
+// SyntheticResult - Synthetic test results
+// ============================================
+model SyntheticResult {
+  id              String   @id @default(uuid())
+  transactionId   String
+  transactionName String
+  url             String
+  description     String?
+  status          String   // passed, failed
+  duration        Int
+
+  // Page metrics (stored as JSON array)
+  pageMetricsJson String   @default("[]")
+
+  errorMessage    String?
+  stackTrace      String?
+  screenshot      String?
+  browser         String   @default("chromium")
+
+  // Viewport (stored as JSON)
+  viewportJson    String   @default("{}")
+
+  userAgent       String?
+  scheduledRun    Boolean  @default(false)
+  cronSchedule    String?
+
+  executedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  // Relations
+  transaction SyntheticTransaction @relation(fields: [transactionId], references: [transactionId])
+
+  @@index([transactionId, executedAt])
+  @@index([status, executedAt])
+  @@index([executedAt])
+}
+
+// ============================================
+// StrategicInitiative - Test initiatives
+// ============================================
+model StrategicInitiative {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+  progress      Int       @default(0)
+  status        String    @default("planning") // planning, in-progress, on-track, at-risk, completed, cancelled
+  priority      String    @default("medium") // low, medium, high, critical
+  targetQuarter String?
+  startDate     DateTime?
+  targetDate    DateTime?
+  completedDate DateTime?
+
+  // Milestones (stored as JSON array)
+  milestonesJson String   @default("[]")
+
+  // Metrics (stored as JSON)
+  metricsJson    String   @default("{}")
+
+  // Tags (stored as JSON array)
+  tagsJson       String   @default("[]")
+
+  isActive       Boolean  @default(true)
+
+  teamId         String?
+  assigneeId     String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  team      Team?       @relation(fields: [teamId], references: [id])
+  assignee  TeamMember? @relation(fields: [assigneeId], references: [id])
+  features  Feature[]
+  testPacks TestPack[]  // legacy direct-link; prefer Feature → TestPack
+
+  @@index([status])
+  @@index([teamId])
+  @@index([isActive])
+}
+
+// ============================================
+// Feature - Product features within an initiative
+// ============================================
+model Feature {
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  initiativeId String
+  teamId       String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  initiative StrategicInitiative @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+  team       Team?               @relation(fields: [teamId], references: [id])
+  testPacks  TestPack[]
+
+  @@index([initiativeId])
+  @@index([teamId])
+}
+
+// ============================================
+// APIKey - External integration API keys
+// ============================================
+model APIKey {
+  id          String    @id @default(uuid())
+  key         String    @unique
+  name        String?
+  description String?
+  hashedKey   String
+
+  // Permissions (stored as JSON array)
+  permissionsJson String @default("[]")
+
+  isActive    Boolean   @default(true)
+  lastUsed    DateTime?
+  expiresAt   DateTime?
+
+  createdAt   DateTime  @default(now())
+}
+
+// ============================================
+// TestDataFile - Local CSV test data files
+// ============================================
+model TestDataFile {
+  id          String   @id @default(uuid())
+  filename    String
+  filePath    String                   // relative: "test-data/<id>.csv" from AURORA_DATA_DIR
+  headersJson String   @default("[]")
+  rowCount    Int      @default(0)
+  previewJson String   @default("[]") // first 5 rows as JSON
+  createdAt   DateTime @default(now())
+
+  // Relations
+  testPacks TestPack[]
+}
+
+// ============================================
+// TestPack - Test groupings for batch execution
+// ============================================
+model TestPack {
+  id          String   @id @default(uuid())
+  name        String
+  description String   @default("")
+  schedule    String?
+  isActive    Boolean  @default(true)
+  lastRunAt   DateTime?
+
+  // Pack lifecycle hooks
+  packSetupCode    String?
+  packTeardownCode String?
+  contextJson      String   @default("{}")
+
+  // Last run results (stored as JSON)
+  lastRunResultsJson String @default("{}")
+
+  // Test data (data-driven execution)
+  testDataFileId      String?  // local CSV fallback
+  testDataContinuumId String?  // Continuum dataset ID
+  testDataMode        String   @default("none") // "none" | "per_row" | "loop"
+
+  teamId        String?
+  initiativeId  String?  // legacy direct-link; prefer featureId
+  featureId     String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  team         Team?                @relation(fields: [teamId], references: [id])
+  initiative   StrategicInitiative? @relation(fields: [initiativeId], references: [id])
+  feature      Feature?             @relation(fields: [featureId], references: [id])
+  tests        TestPackTest[]
+  testDataFile TestDataFile?        @relation(fields: [testDataFileId], references: [id])
+  variables    PackVariable[]
+
+  @@index([teamId])
+  @@index([name])
+}
+
+// ============================================
+// PackVariable - Per-pack encrypted credentials/secrets
+// ============================================
+model PackVariable {
+  id          String   @id @default(uuid())
+  testPackId  String
+  name        String   // e.g. CONTINUUM_HOST — used as {{CONTINUUM_HOST}} in code
+  value       String   // AES-256-GCM encrypted when sensitive, plaintext otherwise
+  sensitive   Boolean  @default(false)
+  description String   @default("")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  testPack    TestPack @relation(fields: [testPackId], references: [id], onDelete: Cascade)
+
+  @@unique([testPackId, name])
+  @@index([testPackId])
+}
+
+// Join table for TestPack <-> AgentTestSpec many-to-many
+model TestPackTest {
+  id         String  @id @default(uuid())
+  testPackId String
+  specId     String
+  sortOrder  Int     @default(0)
+  excluded   Boolean @default(false)
+
+  testPack TestPack      @relation(fields: [testPackId], references: [id], onDelete: Cascade)
+  spec     AgentTestSpec @relation(fields: [specId], references: [specId], onDelete: Cascade)
+
+  @@unique([testPackId, specId])
+  @@index([testPackId, sortOrder])
+}
+
+// ============================================
+// BugReport - Structured defect tracking
+// ============================================
+model BugReport {
+  id               String    @id @default(uuid())
+  title            String
+  status           String    @default("open")   // open, in-progress, resolved, wont-fix
+  severity         String    @default("medium")  // low, medium, high, critical
+  source           String                        // synthetic, pack, manual
+
+  errorMessage     String?
+  stackTrace       String?
+  screenshotPath   String?
+  evidenceDir      String?  // bundle folder name under evidenceRoot; files inside follow a fixed naming convention
+  reproSteps       String?
+
+  consecutiveFails Int       @default(1)
+  firstFailedAt    DateTime  @default(now())
+  lastFailedAt     DateTime  @default(now())
+  resolvedAt       DateTime?
+
+  historyJson      String?   // JSON: [{ at, field, from, to }]
+  notesJson        String?   // JSON: [{ id, text, createdAt }]
+
+  specId           String?
+  spec             AgentTestSpec? @relation(fields: [specId], references: [id])
+  packId           String?
+  healId           String?
+
+  // Ticket this bug was pushed to in the configured issue tracker
+  trackerKey       String?   // e.g. "PAY-123" (Jira) or "4521" (Azure DevOps)
+  trackerUrl       String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([severity])
+  @@index([specId])
+  @@index([source])
+}
+
+// ============================================
+// APITest - API test results
+// ============================================
+model APITest {
+  id           String   @id @default(uuid())
+  endpoint     String
+  method       String   // GET, POST, PUT, PATCH, DELETE
+  service      String
+  status       String   // passed, failed, flaky
+  statusCode   Int?
+  responseTime Int?
+  errorMessage String?
+  testScript   String?
+  coverage     Float?
+
+  teamId       String?
+
+  executedAt   DateTime @default(now())
+
+  // Relations
+  team Team? @relation(fields: [teamId], references: [id])
+
+  @@index([endpoint])
+  @@index([service])
+  @@index([executedAt])
+}
+
+// ============================================
+// AgentTerminalSession - Terminal session state
+// ============================================
+model AgentTerminalSession {
+  id        String   @id @default(uuid())
+  sessionId String   @unique
+  status    String   @default("idle") // idle, planning, plan_complete, generating, generate_complete, running, run_complete, healing, heal_complete, failed
+
+  // Current plan (stored as JSON)
+  currentPlanJson    String @default("{}")
+
+  // Generated specs (stored as JSON array)
+  generatedSpecsJson String @default("[]")
+
+  // Last run (stored as JSON)
+  lastRunJson        String @default("{}")
+
+  // Messages (stored as JSON array)
+  messagesJson       String @default("[]")
+
+  teamId    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  team Team? @relation(fields: [teamId], references: [id])
+
+  // Note: SQLite doesn't support TTL indexes, handle expiration in app code
+  @@index([sessionId])
+}
+
+
+// ============================================
+// TestEnvironment - named execution environments
+// ============================================
+model TestEnvironment {
+  id          String   @id @default(cuid())
+  name        String
+  baseUrl     String   @default("")
+  variables   String   @default("{}") // JSON key-value pairs e.g. {"USERNAME":"admin","API_KEY":"..."}
+  isActive    Boolean  @default(false)
+  color       String   @default("blue") // for UI badge: blue | green | orange | purple | red
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+// ============================================
+// HallucinationLog - AI failure events for prompt improvement
+// ============================================
+model HallucinationLog {
+  id                  String   @id @default(uuid())
+  promptKey           String   // e.g. "generate_runnable_spec"
+  promptVersionHash   String   // first 8 chars of sha1(prompt text) — scopes events to a prompt version
+  failureType         String   // selector_not_found | url_check_failed | strict_mode | heal_loop | user_reject | aria_mismatch
+  aiOutputSnippet     String   @default("")   // first 500 chars of AI output
+  userMessageSnippet  String?                 // first 300 chars of user message
+  ariaSnapshotSnippet String?                 // first 500 chars of ARIA tree at failure
+  targetUrl           String?
+  healAttempts        Int      @default(0)
+  resolved            Boolean  @default(false)  // set true when user applies a prompt fix
+  userFeedback        String?  // accept | edit | reject
+  createdAt           DateTime @default(now())
+
+  @@index([promptKey])
+  @@index([promptKey, resolved])
+  @@index([createdAt])
+}
+
+// ============================================
+// Performance (k6) — authored and run locally, then pushed to Continuum
+// ============================================
+
+// A k6 script with its variables. Sensitive variable values are encrypted
+// with AppSettings.encryptionKey and never leave this machine.
+model PerfScript {
+  id                 String   @id @default(uuid())
+  name               String   @unique
+  description        String   @default("")
+  scriptType         String   @default("http") // http, browser
+  script             String
+  envVarsJson        String   @default("[]")   // [{ key, value, sensitive }] (value encrypted when sensitive)
+  source             String   @default("manual") // recording, har, manual, template
+  lastSmokeJson      String?
+  lastSmokeAt        DateTime?
+  pushedAt           DateTime?
+  continuumScenarioId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  scenarios          PerfScenario[]
+}
+
+// A script under a load profile with pass/fail thresholds.
+model PerfScenario {
+  id                 String   @id @default(uuid())
+  name               String   @unique
+  description        String   @default("")
+  scriptId           String
+  loadJson           String   @default("{}") // { executor, vus, duration, startVUs, stages, rate, timeUnit, preAllocatedVUs, maxVUs }
+  thresholdsJson     String   @default("{}") // { p95Ms, avgMs, maxFailRatePct }
+  thinkTimeSec       Float?                  // overrides the script's THINK_TIME when set
+  baselineRunId      String?
+  pushedAt           DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  script             PerfScript @relation(fields: [scriptId], references: [id], onDelete: Restrict)
+  runs               PerfRun[]
+}
+
+// One local k6 execution of a scenario. Script and load are snapshotted.
+model PerfRun {
+  id                 String   @id @default(uuid())
+  scenarioId         String
+  status             String   @default("queued") // queued, running, passed, failed, error, cancelled
+  scriptSnapshot     String
+  scriptType         String   @default("http")
+  loadSnapshotJson   String   @default("{}")
+  thresholdsSnapshotJson String @default("{}")
+  metricsJson        String   @default("{}")
+  thresholdResultsJson String @default("[]")
+  timeseriesJson     String   @default("[]")
+  comparisonJson     String?
+  liveJson           String?  // { elapsed, vus, iterations } while running
+  consoleLog         String   @default("")
+  exitCode           Int?
+  errorMessage       String?
+  queuedAt           DateTime @default(now())
+  startedAt          DateTime?
+  finishedAt         DateTime?
+
+  scenario           PerfScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioId, queuedAt])
+}

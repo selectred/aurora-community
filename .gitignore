@@ -1,0 +1,15 @@
+node_modules
+dist
+.env
+.claude/
+backend/prisma/dev.db
+backend/prisma/*.db-journal
+backend/dev.db
+backend/prisma/db-backups/
+
+# Compiled backend binaries (too large for GitHub, built by CI)
+frontend/src-tauri/binaries/
+release-files/
+
+# Local build credentials (Apple notarization) — never commit
+frontend/build-local.sh

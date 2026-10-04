@@ -1,0 +1,132 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{vue,js,jsx,ts,tsx}",
+  ],
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        // Primary color palette
+        primary: {
+          50: '#f5f3ff',
+          100: '#ede9fe',
+          200: '#ddd6fe',
+          300: '#c4b5fd',
+          400: '#a78bfa',
+          500: '#7367F0',
+          600: '#6358d4',
+          700: '#5349b8',
+          800: '#433a9c',
+          900: '#332b80',
+          DEFAULT: '#7367F0',
+        },
+        // Status colors
+        success: {
+          50: '#ecfdf5',
+          100: '#d1fae5',
+          200: '#a7f3d0',
+          300: '#6ee7b7',
+          400: '#34d399',
+          500: '#28C76F',
+          600: '#22a85e',
+          700: '#1c894d',
+          800: '#166a3c',
+          900: '#104b2b',
+          DEFAULT: '#28C76F',
+        },
+        warning: {
+          50: '#fffbeb',
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#FF9F43',
+          600: '#e68a3a',
+          700: '#cc7531',
+          800: '#b36028',
+          900: '#994b1f',
+          DEFAULT: '#FF9F43',
+        },
+        danger: {
+          50: '#fef2f2',
+          100: '#fee2e2',
+          200: '#fecaca',
+          300: '#fca5a5',
+          400: '#f87171',
+          500: '#EA5455',
+          600: '#d14849',
+          700: '#b83c3d',
+          800: '#9f3031',
+          900: '#862425',
+          DEFAULT: '#EA5455',
+        },
+        info: {
+          50: '#ecfeff',
+          100: '#cffafe',
+          200: '#a5f3fc',
+          300: '#67e8f9',
+          400: '#22d3ee',
+          500: '#00CFE8',
+          600: '#00b7ce',
+          700: '#009fb4',
+          800: '#00879a',
+          900: '#006f80',
+          DEFAULT: '#00CFE8',
+        },
+        // Neutral colors for layout
+        surface: {
+          light: '#FAFAFB',
+          dark: '#111827',
+        },
+        card: {
+          light: '#FFFFFF',
+          dark: '#1F2937',
+        },
+        border: {
+          light: '#E5E7EB',
+          dark: '#374151',
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+      },
+      fontSize: {
+        'page-title': ['1.5rem', { lineHeight: '2rem', fontWeight: '600' }],
+        'section-title': ['1.125rem', { lineHeight: '1.75rem', fontWeight: '500' }],
+        'body': ['0.875rem', { lineHeight: '1.25rem', fontWeight: '400' }],
+        'label': ['0.75rem', { lineHeight: '1rem', fontWeight: '500' }],
+      },
+      spacing: {
+        '4.5': '1.125rem',
+        '13': '3.25rem',
+        '15': '3.75rem',
+        '18': '4.5rem',
+        '22': '5.5rem',
+        'sidebar': '260px',
+        'topnav': '64px',
+      },
+      borderRadius: {
+        'card': '8px',
+        'button': '8px',
+        'input': '8px',
+      },
+      boxShadow: {
+        'card-light': '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
+        'card-dark': '0 0 15px -3px rgb(0 0 0 / 0.3)',
+        'card-hover-light': '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+        'card-hover-dark': '0 0 20px -3px rgb(0 0 0 / 0.4)',
+        'input-focus': '0 0 0 3px rgba(115, 103, 240, 0.15)',
+      },
+      transitionDuration: {
+        '150': '150ms',
+        '200': '200ms',
+      },
+      transitionTimingFunction: {
+        'ease-in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+    },
+  },
+  plugins: [],
+}

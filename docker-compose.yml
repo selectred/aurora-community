@@ -1,0 +1,38 @@
+# Aurora Community Edition
+#
+#   docker compose up -d --build
+#   open http://localhost:8080
+#
+# Everything is built from this repository. Only the web interface is exposed;
+# your tests, results and settings live in the aurora_data volume.
+
+name: aurora
+
+services:
+  aurora-backend:
+    build: ./backend
+    container_name: aurora-backend
+    restart: unless-stopped
+    volumes:
+      - aurora_data:/data
+    # Lets Aurora reach things on this machine (a local AI model, a local
+    # Continuum) at host.docker.internal, on Linux as well as Docker Desktop
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [aurora]
+
+  aurora-frontend:
+    build: ./frontend
+    container_name: aurora-frontend
+    restart: unless-stopped
+    ports:
+      - "${AURORA_PORT:-8080}:80"
+    depends_on:
+      - aurora-backend
+    networks: [aurora]
+
+volumes:
+  aurora_data:
+
+networks:
+  aurora:

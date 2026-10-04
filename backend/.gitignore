@@ -1,0 +1,9 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+
+
+# k6 downloaded for local development (services/k6/k6Tool.js)
+/.tools/

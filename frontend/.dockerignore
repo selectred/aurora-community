@@ -1,0 +1,8 @@
+node_modules/
+npm-debug.log
+.git
+.gitignore
+.env.local
+.env.*.local
+dist/
+src-tauri/target/
